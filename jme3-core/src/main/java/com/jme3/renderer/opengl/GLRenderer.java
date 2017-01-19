@@ -679,37 +679,63 @@ public final class GLRenderer implements Renderer {
     }
 
     public void applyRenderState(RenderState state) {
-        if (gl2 != null) {
-            if (state.isWireframe() && !context.wireframe) {
-                gl2.glPolygonMode(GL.GL_FRONT_AND_BACK, GL2.GL_LINE);
-                context.wireframe = true;
-            } else if (!state.isWireframe() && context.wireframe) {
-                gl2.glPolygonMode(GL.GL_FRONT_AND_BACK, GL2.GL_FILL);
-                context.wireframe = false;
+        configureWireframe(state);
+
+        configureDepth(state);
+
+        configureState(state);
+
+        configureContext(state);
+    }
+
+	private void configureContext(RenderState state) {
+		if (context.stencilTest != state.isStencilTest()
+                || context.frontStencilStencilFailOperation != state.getFrontStencilStencilFailOperation()
+                || context.frontStencilDepthFailOperation != state.getFrontStencilDepthFailOperation()
+                || context.frontStencilDepthPassOperation != state.getFrontStencilDepthPassOperation()
+                || context.backStencilStencilFailOperation != state.getBackStencilStencilFailOperation()
+                || context.backStencilDepthFailOperation != state.getBackStencilDepthFailOperation()
+                || context.backStencilDepthPassOperation != state.getBackStencilDepthPassOperation()
+                || context.frontStencilFunction != state.getFrontStencilFunction()
+                || context.backStencilFunction != state.getBackStencilFunction()) {
+
+            context.frontStencilStencilFailOperation = state.getFrontStencilStencilFailOperation();   //terrible looking, I know
+            context.frontStencilDepthFailOperation = state.getFrontStencilDepthFailOperation();
+            context.frontStencilDepthPassOperation = state.getFrontStencilDepthPassOperation();
+            context.backStencilStencilFailOperation = state.getBackStencilStencilFailOperation();
+            context.backStencilDepthFailOperation = state.getBackStencilDepthFailOperation();
+            context.backStencilDepthPassOperation = state.getBackStencilDepthPassOperation();
+            context.frontStencilFunction = state.getFrontStencilFunction();
+            context.backStencilFunction = state.getBackStencilFunction();
+
+            if (state.isStencilTest()) {
+                gl.glEnable(GL.GL_STENCIL_TEST);
+                gl.glStencilOpSeparate(GL.GL_FRONT,
+                        convertStencilOperation(state.getFrontStencilStencilFailOperation()),
+                        convertStencilOperation(state.getFrontStencilDepthFailOperation()),
+                        convertStencilOperation(state.getFrontStencilDepthPassOperation()));
+                gl.glStencilOpSeparate(GL.GL_BACK,
+                        convertStencilOperation(state.getBackStencilStencilFailOperation()),
+                        convertStencilOperation(state.getBackStencilDepthFailOperation()),
+                        convertStencilOperation(state.getBackStencilDepthPassOperation()));
+                gl.glStencilFuncSeparate(GL.GL_FRONT,
+                        convertTestFunction(state.getFrontStencilFunction()),
+                        0, Integer.MAX_VALUE);
+                gl.glStencilFuncSeparate(GL.GL_BACK,
+                        convertTestFunction(state.getBackStencilFunction()),
+                        0, Integer.MAX_VALUE);
+            } else {
+                gl.glDisable(GL.GL_STENCIL_TEST);
             }
         }
+        if (context.lineWidth != state.getLineWidth()) {
+            gl.glLineWidth(state.getLineWidth());
+            context.lineWidth = state.getLineWidth();
+        }
+	}
 
-        if (state.isDepthTest() && !context.depthTestEnabled) {
-            gl.glEnable(GL.GL_DEPTH_TEST);
-            context.depthTestEnabled = true;
-        } else if (!state.isDepthTest() && context.depthTestEnabled) {
-            gl.glDisable(GL.GL_DEPTH_TEST);
-            context.depthTestEnabled = false;
-        }
-        if (state.isDepthTest() && state.getDepthFunc() != context.depthFunc) {
-            gl.glDepthFunc(convertTestFunction(state.getDepthFunc()));
-            context.depthFunc = state.getDepthFunc();
-        }
-        
-        if (state.isDepthWrite() && !context.depthWriteEnabled) {
-            gl.glDepthMask(true);
-            context.depthWriteEnabled = true;
-        } else if (!state.isDepthWrite() && context.depthWriteEnabled) {
-            gl.glDepthMask(false);
-            context.depthWriteEnabled = false;
-        }
-
-        if (state.isColorWrite() && !context.colorWriteEnabled) {
+	private void configureState(RenderState state) {
+		if (state.isColorWrite() && !context.colorWriteEnabled) {
             gl.glColorMask(true, true, true, true);
             context.colorWriteEnabled = true;
         } else if (!state.isColorWrite() && context.colorWriteEnabled) {
@@ -833,51 +859,41 @@ public final class GLRenderer implements Renderer {
 
             context.blendMode = state.getBlendMode();
         }
+	}
 
-        if (context.stencilTest != state.isStencilTest()
-                || context.frontStencilStencilFailOperation != state.getFrontStencilStencilFailOperation()
-                || context.frontStencilDepthFailOperation != state.getFrontStencilDepthFailOperation()
-                || context.frontStencilDepthPassOperation != state.getFrontStencilDepthPassOperation()
-                || context.backStencilStencilFailOperation != state.getBackStencilStencilFailOperation()
-                || context.backStencilDepthFailOperation != state.getBackStencilDepthFailOperation()
-                || context.backStencilDepthPassOperation != state.getBackStencilDepthPassOperation()
-                || context.frontStencilFunction != state.getFrontStencilFunction()
-                || context.backStencilFunction != state.getBackStencilFunction()) {
+	private void configureDepth(RenderState state) {
+		if (state.isDepthTest() && !context.depthTestEnabled) {
+            gl.glEnable(GL.GL_DEPTH_TEST);
+            context.depthTestEnabled = true;
+        } else if (!state.isDepthTest() && context.depthTestEnabled) {
+            gl.glDisable(GL.GL_DEPTH_TEST);
+            context.depthTestEnabled = false;
+        }
+        if (state.isDepthTest() && state.getDepthFunc() != context.depthFunc) {
+            gl.glDepthFunc(convertTestFunction(state.getDepthFunc()));
+            context.depthFunc = state.getDepthFunc();
+        }
+        
+        if (state.isDepthWrite() && !context.depthWriteEnabled) {
+            gl.glDepthMask(true);
+            context.depthWriteEnabled = true;
+        } else if (!state.isDepthWrite() && context.depthWriteEnabled) {
+            gl.glDepthMask(false);
+            context.depthWriteEnabled = false;
+        }
+	}
 
-            context.frontStencilStencilFailOperation = state.getFrontStencilStencilFailOperation();   //terrible looking, I know
-            context.frontStencilDepthFailOperation = state.getFrontStencilDepthFailOperation();
-            context.frontStencilDepthPassOperation = state.getFrontStencilDepthPassOperation();
-            context.backStencilStencilFailOperation = state.getBackStencilStencilFailOperation();
-            context.backStencilDepthFailOperation = state.getBackStencilDepthFailOperation();
-            context.backStencilDepthPassOperation = state.getBackStencilDepthPassOperation();
-            context.frontStencilFunction = state.getFrontStencilFunction();
-            context.backStencilFunction = state.getBackStencilFunction();
-
-            if (state.isStencilTest()) {
-                gl.glEnable(GL.GL_STENCIL_TEST);
-                gl.glStencilOpSeparate(GL.GL_FRONT,
-                        convertStencilOperation(state.getFrontStencilStencilFailOperation()),
-                        convertStencilOperation(state.getFrontStencilDepthFailOperation()),
-                        convertStencilOperation(state.getFrontStencilDepthPassOperation()));
-                gl.glStencilOpSeparate(GL.GL_BACK,
-                        convertStencilOperation(state.getBackStencilStencilFailOperation()),
-                        convertStencilOperation(state.getBackStencilDepthFailOperation()),
-                        convertStencilOperation(state.getBackStencilDepthPassOperation()));
-                gl.glStencilFuncSeparate(GL.GL_FRONT,
-                        convertTestFunction(state.getFrontStencilFunction()),
-                        0, Integer.MAX_VALUE);
-                gl.glStencilFuncSeparate(GL.GL_BACK,
-                        convertTestFunction(state.getBackStencilFunction()),
-                        0, Integer.MAX_VALUE);
-            } else {
-                gl.glDisable(GL.GL_STENCIL_TEST);
+	private void configureWireframe(RenderState state) {
+		if (gl2 != null) {
+            if (state.isWireframe() && !context.wireframe) {
+                gl2.glPolygonMode(GL.GL_FRONT_AND_BACK, GL2.GL_LINE);
+                context.wireframe = true;
+            } else if (!state.isWireframe() && context.wireframe) {
+                gl2.glPolygonMode(GL.GL_FRONT_AND_BACK, GL2.GL_FILL);
+                context.wireframe = false;
             }
         }
-        if (context.lineWidth != state.getLineWidth()) {
-            gl.glLineWidth(state.getLineWidth());
-            context.lineWidth = state.getLineWidth();
-        }
-    }
+	}
 
     private int convertBlendEquation(RenderState.BlendEquation blendEquation) {
         switch (blendEquation) {
