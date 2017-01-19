@@ -735,68 +735,17 @@ public final class GLRenderer implements Renderer {
 	}
 
 	private void configureState(RenderState state) {
-		if (state.isColorWrite() && !context.colorWriteEnabled) {
-            gl.glColorMask(true, true, true, true);
-            context.colorWriteEnabled = true;
-        } else if (!state.isColorWrite() && context.colorWriteEnabled) {
-            gl.glColorMask(false, false, false, false);
-            context.colorWriteEnabled = false;
-        }
+		settingColor(state);
 
-        if (state.isPolyOffset()) {
-            if (!context.polyOffsetEnabled) {
-                gl.glEnable(GL.GL_POLYGON_OFFSET_FILL);
-                gl.glPolygonOffset(state.getPolyOffsetFactor(),
-                        state.getPolyOffsetUnits());
-                context.polyOffsetEnabled = true;
-                context.polyOffsetFactor = state.getPolyOffsetFactor();
-                context.polyOffsetUnits = state.getPolyOffsetUnits();
-            } else {
-                if (state.getPolyOffsetFactor() != context.polyOffsetFactor
-                        || state.getPolyOffsetUnits() != context.polyOffsetUnits) {
-                    gl.glPolygonOffset(state.getPolyOffsetFactor(),
-                            state.getPolyOffsetUnits());
-                    context.polyOffsetFactor = state.getPolyOffsetFactor();
-                    context.polyOffsetUnits = state.getPolyOffsetUnits();
-                }
-            }
-        } else {
-            if (context.polyOffsetEnabled) {
-                gl.glDisable(GL.GL_POLYGON_OFFSET_FILL);
-                context.polyOffsetEnabled = false;
-                context.polyOffsetFactor = 0;
-                context.polyOffsetUnits = 0;
-            }
-        }
+        settingPolyOffSet(state);
 
-        if (state.getFaceCullMode() != context.cullMode) {
-            if (state.getFaceCullMode() == RenderState.FaceCullMode.Off) {
-                gl.glDisable(GL.GL_CULL_FACE);
-            } else {
-                gl.glEnable(GL.GL_CULL_FACE);
-            }
+        settingFaceCullMode(state);
 
-            switch (state.getFaceCullMode()) {
-                case Off:
-                    break;
-                case Back:
-                    gl.glCullFace(GL.GL_BACK);
-                    break;
-                case Front:
-                    gl.glCullFace(GL.GL_FRONT);
-                    break;
-                case FrontAndBack:
-                    gl.glCullFace(GL.GL_FRONT_AND_BACK);
-                    break;
-                default:
-                    throw new UnsupportedOperationException("Unrecognized face cull mode: "
-                            + state.getFaceCullMode());
-            }
+        settingGLBlend(state);
+	}
 
-            context.cullMode = state.getFaceCullMode();
-        }
-
-        if (state.getBlendMode() != context.blendMode) {
+	private void settingGLBlend(RenderState state) {
+		if (state.getBlendMode() != context.blendMode) {
             if (state.getBlendMode() == RenderState.BlendMode.Off) {
                 gl.glDisable(GL.GL_BLEND);
             } else {
@@ -858,6 +807,73 @@ public final class GLRenderer implements Renderer {
             }
 
             context.blendMode = state.getBlendMode();
+        }
+	}
+
+	private void settingFaceCullMode(RenderState state) {
+		if (state.getFaceCullMode() != context.cullMode) {
+            if (state.getFaceCullMode() == RenderState.FaceCullMode.Off) {
+                gl.glDisable(GL.GL_CULL_FACE);
+            } else {
+                gl.glEnable(GL.GL_CULL_FACE);
+            }
+
+            switch (state.getFaceCullMode()) {
+                case Off:
+                    break;
+                case Back:
+                    gl.glCullFace(GL.GL_BACK);
+                    break;
+                case Front:
+                    gl.glCullFace(GL.GL_FRONT);
+                    break;
+                case FrontAndBack:
+                    gl.glCullFace(GL.GL_FRONT_AND_BACK);
+                    break;
+                default:
+                    throw new UnsupportedOperationException("Unrecognized face cull mode: "
+                            + state.getFaceCullMode());
+            }
+
+            context.cullMode = state.getFaceCullMode();
+        }
+	}
+
+	private void settingPolyOffSet(RenderState state) {
+		if (state.isPolyOffset()) {
+            if (!context.polyOffsetEnabled) {
+                gl.glEnable(GL.GL_POLYGON_OFFSET_FILL);
+                gl.glPolygonOffset(state.getPolyOffsetFactor(),
+                        state.getPolyOffsetUnits());
+                context.polyOffsetEnabled = true;
+                context.polyOffsetFactor = state.getPolyOffsetFactor();
+                context.polyOffsetUnits = state.getPolyOffsetUnits();
+            } else {
+                if (state.getPolyOffsetFactor() != context.polyOffsetFactor
+                        || state.getPolyOffsetUnits() != context.polyOffsetUnits) {
+                    gl.glPolygonOffset(state.getPolyOffsetFactor(),
+                            state.getPolyOffsetUnits());
+                    context.polyOffsetFactor = state.getPolyOffsetFactor();
+                    context.polyOffsetUnits = state.getPolyOffsetUnits();
+                }
+            }
+        } else {
+            if (context.polyOffsetEnabled) {
+                gl.glDisable(GL.GL_POLYGON_OFFSET_FILL);
+                context.polyOffsetEnabled = false;
+                context.polyOffsetFactor = 0;
+                context.polyOffsetUnits = 0;
+            }
+        }
+	}
+
+	private void settingColor(RenderState state) {
+		if (state.isColorWrite() && !context.colorWriteEnabled) {
+            gl.glColorMask(true, true, true, true);
+            context.colorWriteEnabled = true;
+        } else if (!state.isColorWrite() && context.colorWriteEnabled) {
+            gl.glColorMask(false, false, false, false);
+            context.colorWriteEnabled = false;
         }
 	}
 
