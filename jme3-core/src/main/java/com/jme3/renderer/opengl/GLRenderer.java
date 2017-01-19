@@ -1,4 +1,5 @@
 /*
+
  * Copyright (c) 2009-2014 jMonkeyEngine
  * All rights reserved.
  *
@@ -262,113 +263,112 @@ public final class GLRenderer implements Renderer {
     private void loadCapabilitiesCommon() {
         extensions = loadExtensions();
 
-        limits.put(Limits.VertexTextureUnits, getInteger(GL.GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS));
+        simplifiedLimit();
+
+        SettingCaps();
+
+        // == texture format extensions ==
+
+        boolean hasFloatTexture = textureFormatExtension();
+        
+        // integer texture format extensions
+        configureTextureFormat(hasFloatTexture);
+
+        // == end texture format extensions ==
+
+        GLTextureConfigure();
+
+        // Supports sRGB pipeline.
+        settingRGBPipeline();
+
+        // Print context information
+        configureLoggeropenGL();
+
+        // Print capabilities (if fine logging is enabled)
+        configureLogger();
+
+        texUtil.initialize(caps);
+    }
+
+	private void configureLoggeropenGL() {
+		logger.log(Level.INFO, "OpenGL Renderer Information\n" +
+                        " * Vendor: {0}\n" +
+                        " * Renderer: {1}\n" +
+                        " * OpenGL Version: {2}\n" +
+                        " * GLSL Version: {3}\n" +
+                        " * Profile: {4}",
+                new Object[]{
+                        gl.glGetString(GL.GL_VENDOR),
+                        gl.glGetString(GL.GL_RENDERER),
+                        gl.glGetString(GL.GL_VERSION),
+                        gl.glGetString(GL.GL_SHADING_LANGUAGE_VERSION),
+                        caps.contains(Caps.CoreProfile) ? "Core" : "Compatibility"
+                });
+	}
+
+	private void simplifiedLimit() {
+		limits.put(Limits.VertexTextureUnits, getInteger(GL.GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS));
         if (limits.get(Limits.VertexTextureUnits) > 0) {
             caps.add(Caps.VertexTextureFetch);
         }
 
         limits.put(Limits.FragmentTextureUnits, getInteger(GL.GL_MAX_TEXTURE_IMAGE_UNITS));
 
-        if (caps.contains(Caps.OpenGLES20)) {
-            limits.put(Limits.FragmentUniformVectors, getInteger(GL.GL_MAX_FRAGMENT_UNIFORM_VECTORS));
-            limits.put(Limits.VertexUniformVectors, getInteger(GL.GL_MAX_VERTEX_UNIFORM_VECTORS));
-        } else {
-            limits.put(Limits.FragmentUniformVectors, getInteger(GL.GL_MAX_FRAGMENT_UNIFORM_COMPONENTS) / 4);
-            limits.put(Limits.VertexUniformVectors, getInteger(GL.GL_MAX_VERTEX_UNIFORM_COMPONENTS) / 4);
-        }
+        CapsCondition();
 
         limits.put(Limits.VertexAttributes, getInteger(GL.GL_MAX_VERTEX_ATTRIBS));
         limits.put(Limits.TextureSize, getInteger(GL.GL_MAX_TEXTURE_SIZE));
         limits.put(Limits.CubemapSize, getInteger(GL.GL_MAX_CUBE_MAP_TEXTURE_SIZE));
+	}
 
-        if (hasExtension("GL_ARB_draw_instanced") &&
-                hasExtension("GL_ARB_instanced_arrays")) {
-            caps.add(Caps.MeshInstancing);
+	private void configureLogger() {
+		if (logger.isLoggable(Level.FINE)) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Supported capabilities: \n");
+            for (Caps cap : caps)
+            {
+                sb.append("\t").append(cap.toString()).append("\n");
+            }
+            
+            sb.append("\nHardware limits: \n");
+            for (Limits limit : Limits.values()) {
+                Integer value = limits.get(limit);
+                if (value == null) {
+                    value = 0;
+                }
+                sb.append("\t").append(limit.name()).append(" = ")
+                  .append(value).append("\n");
+            }
+            
+            logger.log(Level.FINE, sb.toString());
+        }
+	}
+
+	private void settingRGBPipeline() {
+		if ( (hasExtension("GL_ARB_framebuffer_sRGB") && hasExtension("GL_EXT_texture_sRGB"))
+                || caps.contains(Caps.OpenGL30) ) {
+            caps.add(Caps.Srgb);
         }
 
-        if (hasExtension("GL_OES_element_index_uint") || gl2 != null) {
-            caps.add(Caps.IntegerIndexBuffer);
+        // Supports seamless cubemap
+        if (hasExtension("GL_ARB_seamless_cube_map") || caps.contains(Caps.OpenGL32)) {
+            caps.add(Caps.SeamlessCubemap);
         }
 
-        if (hasExtension("GL_ARB_texture_buffer_object")) {
-            caps.add(Caps.TextureBuffer);
+        if (caps.contains(Caps.OpenGL32) && !hasExtension("GL_ARB_compatibility")) {
+            caps.add(Caps.CoreProfile);
         }
 
-        // == texture format extensions ==
-
-        boolean hasFloatTexture;
-
-        hasFloatTexture = hasExtension("GL_OES_texture_half_float") &&
-                hasExtension("GL_OES_texture_float");
-
-        if (!hasFloatTexture) {
-            hasFloatTexture = hasExtension("GL_ARB_texture_float") &&
-                    hasExtension("GL_ARB_half_float_pixel");
-
-            if (!hasFloatTexture) {
-                hasFloatTexture = caps.contains(Caps.OpenGL30);
+        if (hasExtension("GL_ARB_get_program_binary")) {
+            int binaryFormats = getInteger(GLExt.GL_NUM_PROGRAM_BINARY_FORMATS);
+            if (binaryFormats > 0) {
+                caps.add(Caps.BinaryShader);
             }
         }
+	}
 
-        if (hasFloatTexture) {
-            caps.add(Caps.FloatTexture);
-        }
-        
-        // integer texture format extensions
-        if(hasExtension("GL_EXT_texture_integer") || caps.contains(Caps.OpenGL30))
-            caps.add(Caps.IntegerTexture);
-
-        if (hasExtension("GL_OES_depth_texture") || gl2 != null) {
-            caps.add(Caps.DepthTexture);
-
-            // TODO: GL_OES_depth24
-        }
-
-        if (hasExtension("GL_OES_rgb8_rgba8") ||
-                hasExtension("GL_ARM_rgba8") ||
-                hasExtension("GL_EXT_texture_format_BGRA8888")) {
-            caps.add(Caps.Rgba8);
-        }
-
-        if (caps.contains(Caps.OpenGL30) || hasExtension("GL_OES_packed_depth_stencil")) {
-            caps.add(Caps.PackedDepthStencilBuffer);
-        }
-
-        if (hasExtension("GL_ARB_color_buffer_float") &&
-                hasExtension("GL_ARB_half_float_pixel")) {
-            // XXX: Require both 16 and 32 bit float support for FloatColorBuffer.
-            caps.add(Caps.FloatColorBuffer);
-        }
-
-        if (hasExtension("GL_ARB_depth_buffer_float")) {
-            caps.add(Caps.FloatDepthBuffer);
-        }
-
-        if ((hasExtension("GL_EXT_packed_float") && hasFloatTexture) ||
-                caps.contains(Caps.OpenGL30)) {
-            // Either OpenGL3 is available or both packed_float & half_float_pixel.
-            caps.add(Caps.PackedFloatColorBuffer);
-            caps.add(Caps.PackedFloatTexture);
-        }
-
-        if (hasExtension("GL_EXT_texture_shared_exponent") || caps.contains(Caps.OpenGL30)) {
-            caps.add(Caps.SharedExponentTexture);
-        }
-
-        if (hasExtension("GL_EXT_texture_compression_s3tc")) {
-            caps.add(Caps.TextureCompressionS3TC);
-        }
-
-        if (hasExtension("GL_ARB_ES3_compatibility")) {
-            caps.add(Caps.TextureCompressionETC2);
-            caps.add(Caps.TextureCompressionETC1);
-        } else if (hasExtension("GL_OES_compressed_ETC1_RGB8_texture")) {
-            caps.add(Caps.TextureCompressionETC1);
-        }
-
-        // == end texture format extensions ==
-
-        if (hasExtension("GL_ARB_vertex_array_object") || caps.contains(Caps.OpenGL30)) {
+	private void GLTextureConfigure() {
+		if (hasExtension("GL_ARB_vertex_array_object") || caps.contains(Caps.OpenGL30)) {
             caps.add(Caps.VertexBufferArray);
         }
 
@@ -445,68 +445,106 @@ public final class GLRenderer implements Renderer {
             }
             caps.add(Caps.Multisample);
         }
+	}
 
-        // Supports sRGB pipeline.
-        if ( (hasExtension("GL_ARB_framebuffer_sRGB") && hasExtension("GL_EXT_texture_sRGB"))
-                || caps.contains(Caps.OpenGL30) ) {
-            caps.add(Caps.Srgb);
+	private void configureTextureFormat(boolean hasFloatTexture) {
+		if(hasExtension("GL_EXT_texture_integer") || caps.contains(Caps.OpenGL30))
+            caps.add(Caps.IntegerTexture);
+
+        if (hasExtension("GL_OES_depth_texture") || gl2 != null) {
+            caps.add(Caps.DepthTexture);
+
+            // TODO: GL_OES_depth24
         }
 
-        // Supports seamless cubemap
-        if (hasExtension("GL_ARB_seamless_cube_map") || caps.contains(Caps.OpenGL32)) {
-            caps.add(Caps.SeamlessCubemap);
+        if (hasExtension("GL_OES_rgb8_rgba8") ||
+                hasExtension("GL_ARM_rgba8") ||
+                hasExtension("GL_EXT_texture_format_BGRA8888")) {
+            caps.add(Caps.Rgba8);
         }
 
-        if (caps.contains(Caps.OpenGL32) && !hasExtension("GL_ARB_compatibility")) {
-            caps.add(Caps.CoreProfile);
+        if (caps.contains(Caps.OpenGL30) || hasExtension("GL_OES_packed_depth_stencil")) {
+            caps.add(Caps.PackedDepthStencilBuffer);
         }
 
-        if (hasExtension("GL_ARB_get_program_binary")) {
-            int binaryFormats = getInteger(GLExt.GL_NUM_PROGRAM_BINARY_FORMATS);
-            if (binaryFormats > 0) {
-                caps.add(Caps.BinaryShader);
+        if (hasExtension("GL_ARB_color_buffer_float") &&
+                hasExtension("GL_ARB_half_float_pixel")) {
+            // XXX: Require both 16 and 32 bit float support for FloatColorBuffer.
+            caps.add(Caps.FloatColorBuffer);
+        }
+
+        if (hasExtension("GL_ARB_depth_buffer_float")) {
+            caps.add(Caps.FloatDepthBuffer);
+        }
+
+        if ((hasExtension("GL_EXT_packed_float") && hasFloatTexture) ||
+                caps.contains(Caps.OpenGL30)) {
+            // Either OpenGL3 is available or both packed_float & half_float_pixel.
+            caps.add(Caps.PackedFloatColorBuffer);
+            caps.add(Caps.PackedFloatTexture);
+        }
+
+        if (hasExtension("GL_EXT_texture_shared_exponent") || caps.contains(Caps.OpenGL30)) {
+            caps.add(Caps.SharedExponentTexture);
+        }
+
+        if (hasExtension("GL_EXT_texture_compression_s3tc")) {
+            caps.add(Caps.TextureCompressionS3TC);
+        }
+
+        if (hasExtension("GL_ARB_ES3_compatibility")) {
+            caps.add(Caps.TextureCompressionETC2);
+            caps.add(Caps.TextureCompressionETC1);
+        } else if (hasExtension("GL_OES_compressed_ETC1_RGB8_texture")) {
+            caps.add(Caps.TextureCompressionETC1);
+        }
+	}
+
+	private boolean textureFormatExtension() {
+		boolean hasFloatTexture;
+
+        hasFloatTexture = hasExtension("GL_OES_texture_half_float") &&
+                hasExtension("GL_OES_texture_float");
+
+        if (!hasFloatTexture) {
+            hasFloatTexture = hasExtension("GL_ARB_texture_float") &&
+                    hasExtension("GL_ARB_half_float_pixel");
+
+            if (!hasFloatTexture) {
+                hasFloatTexture = caps.contains(Caps.OpenGL30);
             }
         }
 
-        // Print context information
-        logger.log(Level.INFO, "OpenGL Renderer Information\n" +
-                        " * Vendor: {0}\n" +
-                        " * Renderer: {1}\n" +
-                        " * OpenGL Version: {2}\n" +
-                        " * GLSL Version: {3}\n" +
-                        " * Profile: {4}",
-                new Object[]{
-                        gl.glGetString(GL.GL_VENDOR),
-                        gl.glGetString(GL.GL_RENDERER),
-                        gl.glGetString(GL.GL_VERSION),
-                        gl.glGetString(GL.GL_SHADING_LANGUAGE_VERSION),
-                        caps.contains(Caps.CoreProfile) ? "Core" : "Compatibility"
-                });
+        if (hasFloatTexture) {
+            caps.add(Caps.FloatTexture);
+        }
+		return hasFloatTexture;
+	}
 
-        // Print capabilities (if fine logging is enabled)
-        if (logger.isLoggable(Level.FINE)) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("Supported capabilities: \n");
-            for (Caps cap : caps)
-            {
-                sb.append("\t").append(cap.toString()).append("\n");
-            }
-            
-            sb.append("\nHardware limits: \n");
-            for (Limits limit : Limits.values()) {
-                Integer value = limits.get(limit);
-                if (value == null) {
-                    value = 0;
-                }
-                sb.append("\t").append(limit.name()).append(" = ")
-                  .append(value).append("\n");
-            }
-            
-            logger.log(Level.FINE, sb.toString());
+	private void SettingCaps() {
+		if (hasExtension("GL_ARB_draw_instanced") &&
+                hasExtension("GL_ARB_instanced_arrays")) {
+            caps.add(Caps.MeshInstancing);
         }
 
-        texUtil.initialize(caps);
-    }
+        if (hasExtension("GL_OES_element_index_uint") || gl2 != null) {
+            caps.add(Caps.IntegerIndexBuffer);
+        }
+
+        if (hasExtension("GL_ARB_texture_buffer_object")) {
+            caps.add(Caps.TextureBuffer);
+        }
+	}
+
+	private void CapsCondition() {
+		if (caps.contains(Caps.OpenGLES20)) {
+            limits.put(Limits.FragmentUniformVectors, getInteger(GL.GL_MAX_FRAGMENT_UNIFORM_VECTORS));
+            limits.put(Limits.VertexUniformVectors, getInteger(GL.GL_MAX_VERTEX_UNIFORM_VECTORS));
+        } else {
+            limits.put(Limits.FragmentUniformVectors, getInteger(GL.GL_MAX_FRAGMENT_UNIFORM_COMPONENTS) / 4);
+            limits.put(Limits.VertexUniformVectors, getInteger(GL.GL_MAX_VERTEX_UNIFORM_COMPONENTS) / 4);
+        }
+	}
 
     private void loadCapabilities() {
         if (gl2 != null) {
